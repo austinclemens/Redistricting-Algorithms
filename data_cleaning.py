@@ -89,6 +89,8 @@ def load_precinct_data():
 			reader=csv.reader(file)
 			temp=[row for row in reader]
 
+		column_indices=[]
+
 		for row in temp:
 			row.append(state)
 			master_list.append(row)	
