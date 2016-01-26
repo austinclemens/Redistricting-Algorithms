@@ -181,7 +181,7 @@ def full_script():
 	# DE: 1 district
 	# FL: County is represented by first three characters in Harvard's 'county' ie Volusia becomes VOL, precinct is that prefix ('VOL') + District
 	# GA: County and District match 'county' and 'precinct' in Harvard
-	# HI
+	# HI: way more rows in 
 	# ID
 	# IL
 	# IN
