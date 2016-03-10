@@ -6,7 +6,7 @@ import math
 import re
 import MySQLdb
 import os
-import pandas
+import pandas as pd
 
 # Here's what we need to do:
 # the algorithm gives a column of census blocks and corresponding column of hypothetical district grouping
@@ -164,62 +164,113 @@ def full_script():
 	# The problem is that the Harvard file are not well-aligned with the census files, so
 	# to match them, we have to do something like get all districts that are in Alabama in
 	# CountyFP 001, then fuzzy match on district code, name, and namelsad. 
+	# following is sa look at how each state might be matched
 
-	votes=
-
-
-
-	# State by state breakdown of the voting files:
+	# State by state breakdown of the voting files FOR 2010:
 
 	# AK: 1 district
-	# AL: Name/namelsad is a very close match for harvard 'precinct' (use with county)
-	# AZ: Combination of County Name + District. ex: district=54, county=Rock point, harvard='54 Rock Point - Prec #: 54.1' 
-	# AR: Name is a very close match for harvard 'precinct' (use with county) - some absentee
-	# CA: tricky - statefips+countyfips gives harvard county_code. The rest is completely impenetrable. I have no idea.
-	# CO: 'District' matches the harvard 'vtd' field
-	# CT: Harvard data is aggregated by something other than voting district. Unuseable.
+	# AL: remove leading 0s from countyFP (ie 1,2,3), match to fips_cnty then fuzzy match namelsad to precinct. vars: g2010_USH_dv, g2010_USH_rv, g2010_USH_dv2, g2010_USH_rv2
+	# AZ: none
+	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2010_USH_dv	g2010_USH_rv
+	# CA: IDGI. it's like a slightly shorter block id and it doesn't seem to match anything I have.
+	# CO: It seems like vtd is an exact match for District. g2010_USH_rv	g2010_USH_dv
+	# CT: This is based on townships or something? I don't see how it can be done.
 	# DE: 1 district
-	# FL: County is represented by first three characters in Harvard's 'county' ie Volusia becomes VOL, precinct is that prefix ('VOL') + District
-	# GA: County and District match 'county' and 'precinct' in Harvard
-	# HI: way more rows in 
-	# ID
-	# IL
-	# IN
-	# IA
-	# KS
-	# KY
-	# LA
-	# ME
-	# MD
-	# MA
-	# MI
-	# MN
-	# MS
-	# MO
-	# MT
-	# NE
-	# NV
-	# NH
-	# NJ
-	# NM
-	# NY
-	# NC
-	# ND
-	# OH
+	# FL: have to pull apart the precinct column, which looks like: 'ALA0001' - this matches to County: 'Alachua County' and District: '0001'. it's not entirely clear how that first letter thing works. g2010_USH_dv	g2010_USH_rv
+	# GA: none
+	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
+	# ID: can't be done. Lots of aggregation in the Harvard files.
+	# IL: none
+	# IN: none
+	# IA: none
+	# KS: easy - match County to county and then vtd to District. g2010_USH_dv	g2010_USH_rv
+	# KY - investigate - KY is not in cid why?
+	# LA: no way to match
+	# ME: no way to match
+	# MD: no way to match
+	# MA: no way to match
+	# MI: no way to match 
+	# MN: match county to int(County) and then Name to precinct. g2010_USH_dv	g2010_USH_rv
+	# MS: match County to county and then Name to precinct. g2010_USH_dv	g2010_USH_rv	g2010_USH_dv2	g2010_USH_rv2
+	# MO: match county to County and then... precinct should match name but the match is *very* inexact. I'm not sure traditional word distance kinda thing will work. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2 g2010_USH_dv3	g2010_USH_rv3
+	# MT: 1 district
+	# NE: none
+	# NV: this is basically perfect - County to county_name, then precinct to Name - the 'PRECINCT 16' part of name, not 'CHURCHILL PREINCT 16', g2010_USH_dv	g2010_USH_rv
+	# NH: County to county and town to Name g2012_USH_rv	g2012_USH_dv
+	# NJ: none
+	# NM: none
+	# NY: match County to county_name and vtd08 to District. g2010_USH_dv	g2010_USH_rv
+	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
+	# ND: 1 district
+	# OH: County to county and Name to precinct_code. dv dv2 dv3
+	# OK: 
+	# OR
+	# PA
+	# RI
+	# SC
+	# SD: 1 district
+	# TN
+	# TX
+	# UT
+	# VT: 1 district
+	# VA
+	# WA
+	# WV
+	# WI
+	# WY: 1 district
+
+
+	# State by state breakdown of the voting files FOR 2012:
+
+	# AK: 1 district
+	# AL: fuzzy match County to county then fuzzy match namelsad to precinct. vars: g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2
+	# AZ: remove 'County' from County and then match to county, take the first 2 (3?) digits of precinct and match to District. There is an election total row but that wil be ignored with this procedure g2012_USH_dv	g2012_USH_rv
+	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2012_USH_dv	g2012_USH_rv
+	# CA: none
+	# CO: none
+	# CT: This is based on townships or something? I don't see how it can be done.
+	# DE: 1 district
+	# FL: none
+	# GA: county is a match with County (although county has no 'county suffix') and precinct is an exact match for district. g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2, g2012_USH_dv3, g2012_USH_rv3, g2012_USH_dv4, g2012_USH_rv4
+	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
+	# ID: Can't be done.
+	# IL: Match County to county, match precinct to Name. precinct looks like: 'Ellington PCT 3' vs name: ELLINGTON 3 - so maybe just remove pct g2012_USH_dv g2012_USH_rv g2012_USH_dv2 g2012_USH_rv2 g2012_USH_dv3 g2012_USH_rv3
+	# IN: none
+	# IA: none
+	# KS: easy - match County to county and then vtd to District. g2012_USH_dv	g2012_USH_rv
+	# KY - investigate - KY is not in cid why?
+	# LA: no way to match
+	# ME: no way to match
+	# MD: no way to match
+	# MA: no way to match
+	# MI: none
+	# MN: match county to int(County) and then int(district) to precinct. g2010_USH_dv	g2010_USH_rv
+	# MS: match County to county and then Name to precinct. g2012_USH_dv	g2012_USH_rv	g2012_USH_dv2	g2012_USH_rv2
+	# MO: none
+	# MT: 1 district
+	# NE: match county to County and Name to precinct g2012_USH_dv	g2012_USH_rv
+	# NV: none
+	# NH: County to county and precinct to Name g2012_USH_rv	g2012_USH_dv
+	# NJ: none
+	# NM: county to County and District to precinct. g2012_USH_rv	g2012_USH_tv
+	# NY: none
+	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
+	# ND: 1 district
+	# OH: none
 	# OK
 	# OR
 	# PA
 	# RI
 	# SC
-	# SD
+	# SD: 1 district
 	# TN
 	# TX
 	# UT
-	# VT
+	# VT: 1 district
 	# VA
 	# WA
 	# WV
-	# WI: 
+	# WI
 	# WY: 1 district
 
 
