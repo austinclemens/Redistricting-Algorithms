@@ -7,6 +7,7 @@ import re
 import MySQLdb
 import os
 import pandas as pd
+import difflib
 
 # Here's what we need to do:
 # the algorithm gives a column of census blocks and corresponding column of hypothetical district grouping
@@ -203,20 +204,20 @@ def full_script():
 	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
 	# ND: 1 district
 	# OH: County to county and Name to precinct_code. dv dv2 dv3
-	# OK: 
-	# OR
-	# PA
-	# RI
-	# SC
+	# OK: look at precinct column, which looks like this: "ALFALFA CO. PCT 020110" - the first bit matches County, the number matches up to District but only the last 3 digits (110), dv and dv2
+	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
+	# PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv
+	# RI: no RI rows in CID
+	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
 	# SD: 1 district
-	# TN
-	# TX
-	# UT
+	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
+	# TX: County to county and District to vtd, dv only
+	# UT: none
 	# VT: 1 district
-	# VA
-	# WA
-	# WV
-	# WI
+	# VA: County to county and then fuzzy Name to precinct, dv only
+	# WA: County to county and Name to precinct, dv only
+	# WV: at first blush these match up but some counties with unusual schemes do not sync between the datasets, I would avoid
+	# WI: match mcd to Name, dv only
 	# WY: 1 district
 
 
@@ -257,24 +258,83 @@ def full_script():
 	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
 	# ND: 1 district
 	# OH: none
-	# OK
-	# OR
-	# PA
-	# RI
-	# SC
+	# OK: match County to county and then District to the last 3 (4?) digits of precinct, dv and dv2
+	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
+	# PA: match County to county and District to precinct_code, but there is no house race here?
+	# RI: no RI rows in CID
+	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
 	# SD: 1 district
-	# TN
-	# TX
-	# UT
+	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
+	# TX: County to county and District to vtd, dv only
+	# UT: none
 	# VT: 1 district
-	# VA
-	# WA
-	# WV
-	# WI
+	# VA: County to county and then fuzzy Name to precinct, dv only
+	# WA: County to county and Name to precinct_name, dv only
+	# WV: none
+	# WI: none
 	# WY: 1 district
 
+	# states with missing CID rows: RI, OR, KY
+	# this is due to missing fips codes for counties - doesn't seem like having them would help but for matching more states but come back to this
+
+	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
+	state_files=os.listdir(prec_votes_folder)
+	state_files=[file for file in state_files if file[-3:]=='tab']
+
+	cid['g2012_USH_dv']=0
+	cid['g2012_USH_rv']=0
+	cid['g2012_USH_dv2']=0
+	cid['g2012_USH_rv2']=0
+	cid['g2012_USH_dv3']=0
+	cid['g2012_USH_rv3']=0
+	cid['g2012_USH_dv4']=0
+	cid['g2012_USH_rv4']=0
+
+	# load all state files into the data_dict
+	data_dict={}
+
+	for dfile in state_files:
+		state=dfile[0:2]
+		year=dfile[3:7]
+		dfile=prec_votes_folder+'/'+dfile
+
+		with open(dfile,'rU') as csvfile:
+			reader=csv.reader(csvfile,delimiter='\t')
+			temp=[row for row in reader]
+		
+		temp=pd.DataFrame(temp[1:],columns=temp[0])
+
+		if state not in data_dict.keys():
+			data_dict[state]={}
+
+		data_dict[state][year]=temp
+
+	# cid columns: u'state_x', u'StateFP', u'County', u'CountyFP', u'District', u'Name'
+	# merge in each state file following the rules above.
+	for state in data_dict.keys():
+		for year in data_dict[state].keys():
+
+			temp=data_dict[state][year]
+			# all the merge rules go here
+			if state=='AL':
+				if int(year)==2010:
+					temp['fips_cnty']=temp['fips_cnty'].astype(int)
+					temp['new'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
+					temp.apply(lambda x: x['precinct'])
 
 
 
+				else if int(year)==2012:
+					pass
 
+
+def fuzzy_matcher(string,comparison):
+	# function for fuzzy matching. Cutoff is an important variable - make it bigger and it will prevent false matches
+	# but may miss true matches, and if there is a match for every string it won't matter so I err on the side of making
+	# it smaller.
+	try:
+		res=difflib.get_close_matches(string.lower(),[c.lower() for c in comparison],cutoff=.4)[0]
+	except:
+		res=''
+	return res
 
