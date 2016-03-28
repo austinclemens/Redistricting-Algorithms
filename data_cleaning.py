@@ -9,6 +9,39 @@ import os
 import pandas as pd
 import difflib
 
+# 2014 exit polls
+#			Dem		Rep		Other
+# White M 	33%		64%		3%
+# White F 	42%		56%		2%
+# Black M 	86%		13%		1%
+# Black F 	91%		8%		1%
+# Latino M 	57%		41%		2%
+# Latino F 	66%		32%		2%
+# Other		49%		48%		3%
+
+#			Dem		Rep		Other
+# White		38%		60%		2%
+# Black		89%		10%		1%
+# Latino	62%		36%		2%
+# Asian		49%		50%		1%
+# Other		49%		47%		4%
+
+#				Dem		Rep		Other
+# White 18-29	43%		54%		3%
+# White 30-44	40%		58%		2%
+# White 45-64	36%		62%		2%
+# White 65+		36%		62%		2%
+# Black 18-29	88%		11%		1%
+# Black 30-44	86%		12%		2%
+# Black 45-64	90%		9%		1%
+# Black 65+		92%		7%		1%
+# Latino 18-29	68%		28%		4%
+# Latino 30-44	56%		42%		2%
+# Latino 45-64	62%		37%		2%
+# Latino 65+	64%		34%		2%
+# Other			49%		49%		2%
+
+
 # Here's what we need to do:
 # the algorithm gives a column of census blocks and corresponding column of hypothetical district grouping
 # Using Block ID to voting district you can group the blocks up into county/district combos
@@ -28,6 +61,11 @@ import difflib
 
 # compile all the block map/district files
 # execfile('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/data_cleaning.py')
+
+# notes for assembling block demographics:
+# in the algeo2010.pl style file, you get the block number by:
+# filtering for row[0][8:11]=='750'
+#		row[27:32]+row[54:60]+row[61:65]
 
 def block_vd_pandas():
 	files=os.listdir('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/Block ID to voting district/')
