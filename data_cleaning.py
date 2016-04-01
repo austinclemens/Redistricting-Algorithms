@@ -9,7 +9,7 @@ import os
 import pandas as pd
 import difflib
 
-pd.set_option('line_width',150)
+pd.set_option('display.width',150)
 
 # 2014 exit polls
 #			Dem		Rep		Other
@@ -206,8 +206,12 @@ def precinct_names():
 	temp_pandas=pd.DataFrame(master_list,columns=['StateFP','CountyFP','District','Name','Namelsad','state_x'])
 	return temp_pandas
 
-def existing_district():
+def existing_districts():
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/National_CD114.txt','rU') as cfile:
+		reader=csv.reader(cfile)
+		temp=[row for row in reader]
 
+	existingd=pd.DataFrame(temp,columns=['BlockID','real_district'])
 	return existingd
 
 def full_script():
@@ -218,6 +222,8 @@ def full_script():
 	c=pd.merge(c,existingd,on='BlockID')
 	b=load_algorithm_blocks()
 	cd=pd.merge(c,b,on='BlockID')
+
+	return cd
 
 	# need to create a column that tracks how many blocks are in each district - a count of duplicates
 	# and then, when you get rid of blocks and boil the data set down to algorithm/district combos, need
@@ -248,7 +254,7 @@ def full_script():
 	cid=pd.merge(cid,fips,on=['StateFP','CountyFP'])
 
 	# big re-ordering of CID just to make it a little cleaner
-	cid=cid[['state_x','StateFP','County','CountyFP','District','Name','Namelsad','BlockID','HouseDistrict','blocks','ADblocks','percent_district_in_AlgoHouseDist']]
+	cid=cid[['state_x','StateFP','County','CountyFP','District','Name','Namelsad','BlockID','HouseDistrict','real_district','blocks','ADblocks','percent_district_in_AlgoHouseDist']]
 
 	return cid
 
@@ -311,7 +317,6 @@ def full_script():
 	# WI: match mcd to Name, dv only
 	# WY: 1 district
 
-
 	# State by state breakdown of the voting files FOR 2012:
 
 	# AK: 1 district
@@ -368,6 +373,56 @@ def full_script():
 	# states with missing CID rows: RI, OR, KY
 	# this is due to missing fips codes for counties - doesn't seem like having them would help but for matching more states but come back to this
 
+def merge_exitpolls(cid):
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/data_cleaning.csv','rU') as cfile:
+		reader=csv.reader(cfile)
+		exits=[row for row in reader]
+
+	exits=exits[1:]
+
+	for i,row in enumerate(exits):
+		for j,entry in enumerate(row):
+
+			try:
+				exits[i][j]=float(exits[i][j])
+			except:
+				pass
+
+			if entry=='':
+				exits[i][j]=.5
+
+	exits=pd.DataFrame(exits,columns=['state_x', 'exit_type', 'whitervote', 'blackrvote', 'hispanicrvote', 'asianrvote', 'otherrvote', 'whitercomp', 'blackrcomp', 'hispanicrcomp', 'asianrcomp', 'otherrcomp'])
+	cid=pd.merge(cid,exits,on='state_x')
+	return cid
+
+def calculate_districts(state,cd):
+	temp=cd[cd['state_x']==state]
+	real_districts=list(set(temp['real_district']))
+	algo_districts=list(set(temp['HouseDistrict']))
+
+	temp['rvotes']=temp['white']*temp['whitercomp']*temp['whitervote']+temp['black']*temp['blackrcomp']*temp['blackrvote']+temp['hispanic']*temp['hispanicrcomp']*temp['hispanicrvote']+temp['asian']*temp['asianrcomp']*temp['asianrvote']+temp['other']*temp['otherrcomp']*temp['otherrvote']
+	temp['dvotes']=temp['white']*temp['whitercomp']*(1-temp['whitervote'])+temp['black']*temp['blackrcomp']*(1-temp['blackrvote'])+temp['hispanic']*temp['hispanicrcomp']*(1-temp['hispanicrvote'])+temp['asian']*temp['asianrcomp']*(1-temp['asianrvote'])+temp['other']*temp['otherrcomp']*(1-temp['otherrvote'])
+
+	print 'Real District      R Vote      D Vote'
+	for dist in real_districts:
+		dist_temp=temp[temp['real_district']==dist]
+
+		tempr=dist_temp['rvotes'].sum()
+		tempd=dist_temp['dvotes'].sum()
+
+		print "{:<13}".format(dist),"{:>12}".format(int(1000*tempr/(tempr+tempd))/10),"{:>12}".format(int(1000*tempd/(tempr+tempd))/10)
+
+	print ''
+
+	print 'Algo District      R Vote      D Vote'
+	for dist in algo_districts:
+		dist_temp=temp[temp['HouseDistrict']==dist]
+
+		tempr=dist_temp['rvotes'].sum()
+		tempd=dist_temp['dvotes'].sum()
+
+		print "{:<13}".format(dist),"{:>12}".format(int(1000*tempr/(tempr+tempd))/10),"{:>12}".format(int(1000*tempd/(tempr+tempd))/10)
+
 def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
@@ -416,7 +471,6 @@ def merge_harvard(cid):
 
 				elif int(year)==2012:
 					pass
-
 
 def fuzzy_matcher(string,comparison):
 	# function for fuzzy matching. Cutoff is an important variable - make it bigger and it will prevent false matches
