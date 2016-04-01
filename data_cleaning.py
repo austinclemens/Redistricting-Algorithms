@@ -9,6 +9,8 @@ import os
 import pandas as pd
 import difflib
 
+pd.set_option('line_width',150)
+
 # 2014 exit polls
 #			Dem		Rep		Other
 # White M 	33%		64%		3%
@@ -66,6 +68,12 @@ import difflib
 # in the algeo2010.pl style file, you get the block number by:
 # filtering for row[0][8:11]=='750'
 #		row[27:32]+row[54:60]+row[61:65]
+# In the 2nd data file, 
+# 	hispanic over 18: row[77]
+#	white over 18: row[80]
+#	black over 18: row[81]
+#	asian over 18: row[83]
+#	other: row[76] - row[77] - row[80] - row[81] - row[83]
 
 def block_vd_pandas():
 	files=os.listdir('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/Block ID to voting district/')
@@ -89,6 +97,41 @@ def block_vd_pandas():
 
 	temp_pandas=pd.DataFrame(master_list,columns=['BlockID','CountyFP','District','state'])
 	return temp_pandas
+
+
+def load_demographics():
+	directories=os.listdir('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/census_redistricting_data/')
+	directories=[d for d in directories if d[-2:]=='pl']
+	master=pd.DataFrame([['',0,0,0,0,0]],columns=['BlockID','hispanic','white','black','asian','other'])
+
+	for direct in directories:
+		path='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/census_redistricting_data/'+direct
+		state=direct[0:2]
+		print 'demographics: ',state
+
+		with open(path+'/'+state+'geo2010.pl','rU') as csvfile:
+			reader=csv.reader(csvfile)
+			temp=[row for row in reader]
+
+		geos=[[row[0][18:25],row[0][8:11],row[0][27:32]+row[0][54:60]+row[0][61:65]] for row in temp]
+		geos=pd.DataFrame(geos,columns=['logical','type','BlockID'])
+
+		with open(path+'/'+state+'000022010.pl','rU') as csvfile:
+			reader=csv.reader(csvfile)
+			temp=[row for row in reader]
+
+		data=[[row[4],int(row[77]),int(row[80]),int(row[81]),int(row[83]),int(row[76])-int(row[77])-int(row[80])-int(row[81])-int(row[83])] for row in temp]
+		data=pd.DataFrame(data,columns=['logical','hispanic','white','black','asian','other'])
+
+		full=pd.merge(geos,data,on='logical')
+		full=full[full['type']=='750']
+		print len(full)
+		full=full[['BlockID','hispanic','white','black','asian','other']]
+
+		master=pd.concat([master,full])
+
+	return master
+
 
 def load_algorithm_blocks():
 	files=os.listdir('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/Algorithm District Blocks/')
@@ -163,10 +206,18 @@ def precinct_names():
 	temp_pandas=pd.DataFrame(master_list,columns=['StateFP','CountyFP','District','Name','Namelsad','state_x'])
 	return temp_pandas
 
+def existing_district():
+
+	return existingd
+
 def full_script():
 	a=block_vd_pandas()
+	total=load_demographics()
+	c=pd.merge(a,total,on='BlockID')
+	existingd=existing_districts()
+	c=pd.merge(c,existingd,on='BlockID')
 	b=load_algorithm_blocks()
-	cd=pd.merge(a,b,on='BlockID')
+	cd=pd.merge(c,b,on='BlockID')
 
 	# need to create a column that tracks how many blocks are in each district - a count of duplicates
 	# and then, when you get rid of blocks and boil the data set down to algorithm/district combos, need
@@ -198,6 +249,8 @@ def full_script():
 
 	# big re-ordering of CID just to make it a little cleaner
 	cid=cid[['state_x','StateFP','County','CountyFP','District','Name','Namelsad','BlockID','HouseDistrict','blocks','ADblocks','percent_district_in_AlgoHouseDist']]
+
+	return cid
 
 	# so now you have a nice thing: 186k row matrix of VTDs matched to algorithm districts.
 	# The problem is that the Harvard file are not well-aligned with the census files, so
@@ -315,6 +368,7 @@ def full_script():
 	# states with missing CID rows: RI, OR, KY
 	# this is due to missing fips codes for counties - doesn't seem like having them would help but for matching more states but come back to this
 
+def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
 	state_files=[file for file in state_files if file[-3:]=='tab']
@@ -360,9 +414,7 @@ def full_script():
 					temp['new'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
 					temp.apply(lambda x: x['precinct'])
 
-
-
-				else if int(year)==2012:
+				elif int(year)==2012:
 					pass
 
 
