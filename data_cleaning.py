@@ -396,6 +396,7 @@ def merge_exitpolls(cid):
 	return cid
 
 def calculate_districts(state,cd):
+	## FIX THIS - comps are not % of race voted, they are % race voters made of total electorate - need to use this to calculate % race voted
 	temp=cd[cd['state_x']==state]
 	real_districts=list(set(temp['real_district']))
 	algo_districts=list(set(temp['HouseDistrict']))
