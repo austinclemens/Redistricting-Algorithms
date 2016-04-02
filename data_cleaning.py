@@ -423,6 +423,69 @@ def calculate_districts(state,cd):
 
 		print "{:<13}".format(dist),"{:>12}".format(int(1000*tempr/(tempr+tempd))/10),"{:>12}".format(int(1000*tempd/(tempr+tempd))/10)
 
+def arrange_rawvote():
+	# this is a one-time thing to clean up the rawvote file (which comes from http://psephos.adam-carr.net/countries/u/usa/congress/house2014.txt)
+	states=['ALABAMA', 'ALASKA', 'ARIZONA', 'ARKANSAS', 'CALIFORNIA', 'COLORADO', 'CONNECTICUT', 'DELAWARE', 'FLORIDA', 'GEORGIA', 'HAWAII', 'IDAHO', 'ILLINOIS', 'INDIANA', 'IOWA', 'KANSAS', 'KENTUCKY', 'LOUISIANA', 'MAINE', 'MARYLAND', 'MASSACHUSETTS', 'MICHIGAN', 'MINNESOTA', 'MISSISSIPPI', 'MISSOURI', 'MONTANA', 'NEBRASKA', 'NEVADA', 'NEW HAMPSHIRE', 'NEW JERSEY', 'NEW MEXICO', 'NEW YORK', 'NORTH CAROLINA', 'NORTH DAKOTA', 'OHIO', 'OKLAHOMA', 'OREGON', 'PENNSYLVANIA', 'RHODE ISLAND', 'SOUTH CAROLINA', 'SOUTH DAKOTA', 'TENNESSEE', 'TEXAS', 'UTAH', 'VERMONT', 'VIRGINIA', 'WASHINGTON', 'WEST VIRGINIA', 'WISCONSIN', 'WYOMING']
+	first=1
+	master=[]
+	current_state=''
+
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/rawvote.txt','rU') as cfile:
+		rawvote=[row for row in cfile]
+
+	for row in rawvote[6:]:
+		print row
+		row=row.strip()
+		if row in states:
+			previous_state=current_state
+			current_state=row
+
+		if 'DISTRICT' in row:
+			temp=int(row[9:11])
+			if first==0:
+				if temp==1:
+					master.append([previous_state,district,rvote,dvote])
+					rvote=0
+					dvote=0
+				if temp!=1:
+					master.append([current_state,district,rvote,dvote])
+					rvote=0
+					dvote=0
+			if first==1:
+				first=0
+			district=int(row[9:11])
+
+		if 'AT-LARGE' in row.upper():
+			temp=1
+			if first==0:
+				if temp==1:
+					master.append([previous_state,district,rvote,dvote])
+					rvote=0
+					dvote=0
+				if temp!=1:
+					master.append([current_state,district,rvote,dvote])
+					rvote=0
+					dvote=0
+			district=1
+
+		if 'Republican' in row:
+			if 'Unopposed' not in row:
+				row=row.split('  ')
+				vote=row[-2].strip().replace(',','').replace('.','')
+				rvote=int(vote)
+			if 'Unopposed' in row:
+				rvote=0
+
+		if 'Democratic' in row:
+			if 'Unopposed' not in row:
+				row=row.split('  ')
+				vote=row[-2].strip().replace(',','').replace('.','')
+				dvote=int(vote)
+			if 'Unopposed' in row:
+				rvote=0
+
+	return master
+
 def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
