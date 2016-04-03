@@ -487,6 +487,27 @@ def arrange_rawvote():
 
 	return master
 
+def turnout_rawvote(cd):
+	# take the rawvote data, which has race by composition of electorate, and change it to turnout %age for each race
+	# pass in the block pandas datafile to compare
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/rawvote_altered.csv','rU') as cfile:
+		rawvote=[row for row in cfile]
+
+	rawvote[0].append('whiteturnout')
+	rawvote[0].append('blackturnout')
+	rawvote[0].append('hispanicturnout')
+	rawvote[0].append('asianturnout')
+	rawvote[0].append('otherturnout')
+
+	for row in rawvote[1:]:
+		state=row[0]
+
+		totalwhite=cd[cd['state_x']==state]['white'].sum()
+		totalblack=cd[cd['state_x']==state]['black'].sum()
+		totalhispanic=cd[cd['state_x']==state]['hispanic'].sum()
+		totalasian=cd[cd['state_x']==state]['asian'].sum()
+		totalother=cd[cd['state_x']==state]['other'].sum()
+
 def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
