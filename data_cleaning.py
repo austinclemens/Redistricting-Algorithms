@@ -11,6 +11,61 @@ import difflib
 
 pd.set_option('display.width',150)
 
+realstate=['AK','AR','CA','CO','FL','GA','IA','IL','KS','KY','LA','ME','MI','MN','MS','NC','NH','NY','OH','OR','PA','SC','SD','WI','VA','TX','WV']
+
+states = {
+        'AK': 'Alaska',
+        'AL': 'Alabama',
+        'AR': 'Arkansas',
+        'AZ': 'Arizona',
+        'CA': 'California',
+        'CO': 'Colorado',
+        'CT': 'Connecticut',
+        'DE': 'Delaware',
+        'FL': 'Florida',
+        'GA': 'Georgia',
+        'HI': 'Hawaii',
+        'IA': 'Iowa',
+        'ID': 'Idaho',
+        'IL': 'Illinois',
+        'IN': 'Indiana',
+        'KS': 'Kansas',
+        'KY': 'Kentucky',
+        'LA': 'Louisiana',
+        'MA': 'Massachusetts',
+        'MD': 'Maryland',
+        'ME': 'Maine',
+        'MI': 'Michigan',
+        'MN': 'Minnesota',
+        'MO': 'Missouri',
+        'MS': 'Mississippi',
+        'MT': 'Montana',
+        'NC': 'North Carolina',
+        'ND': 'North Dakota',
+        'NE': 'Nebraska',
+        'NH': 'New Hampshire',
+        'NJ': 'New Jersey',
+        'NM': 'New Mexico',
+        'NV': 'Nevada',
+        'NY': 'New York',
+        'OH': 'Ohio',
+        'OK': 'Oklahoma',
+        'OR': 'Oregon',
+        'PA': 'Pennsylvania',
+        'RI': 'Rhode Island',
+        'SC': 'South Carolina',
+        'SD': 'South Dakota',
+        'TN': 'Tennessee',
+        'TX': 'Texas',
+        'UT': 'Utah',
+        'VA': 'Virginia',
+        'VT': 'Vermont',
+        'WA': 'Washington',
+        'WI': 'Wisconsin',
+        'WV': 'West Virginia',
+        'WY': 'Wyoming'
+}
+
 # 2014 exit polls
 #			Dem		Rep		Other
 # White M 	33%		64%		3%
@@ -42,7 +97,6 @@ pd.set_option('display.width',150)
 # Latino 45-64	62%		37%		2%
 # Latino 65+	64%		34%		2%
 # Other			49%		49%		2%
-
 
 # Here's what we need to do:
 # the algorithm gives a column of census blocks and corresponding column of hypothetical district grouping
@@ -214,6 +268,20 @@ def existing_districts():
 	existingd=pd.DataFrame(temp,columns=['BlockID','real_district'])
 	return existingd
 
+def state_diagnostics():
+	for key in states.keys():
+		try:
+			calculate_districts(key,cd)
+		except:
+			print 'ERROR ',key
+
+def state_diagnostics2():
+	for key in realstate:
+		try:
+			calculate_districts(key,cd)
+		except:
+			print 'ERROR ',key
+
 def full_script():
 	a=block_vd_pandas()
 	total=load_demographics()
@@ -221,7 +289,8 @@ def full_script():
 	existingd=existing_districts()
 	c=pd.merge(c,existingd,on='BlockID')
 	b=load_algorithm_blocks()
-	cd=pd.merge(c,b,on='BlockID')
+	b.columns=['BlockID2','HouseDistrict','state']
+	cd=pd.merge(c,b,left_on='BlockID',right_on='BlockID2',how='outer')
 
 	return cd
 
@@ -374,7 +443,7 @@ def full_script():
 	# this is due to missing fips codes for counties - doesn't seem like having them would help but for matching more states but come back to this
 
 def merge_exitpolls(cid):
-	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/data_cleaning.csv','rU') as cfile:
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/exitpoll_altered_final.csv','rU') as cfile:
 		reader=csv.reader(cfile)
 		exits=[row for row in reader]
 
@@ -391,38 +460,104 @@ def merge_exitpolls(cid):
 			if entry=='':
 				exits[i][j]=.5
 
-	exits=pd.DataFrame(exits,columns=['state_x', 'exit_type', 'whitervote', 'blackrvote', 'hispanicrvote', 'asianrvote', 'otherrvote', 'whitercomp', 'blackrcomp', 'hispanicrcomp', 'asianrcomp', 'otherrcomp'])
+	exits=pd.DataFrame(exits,columns=['state_x', 'exit_type', 'whitervote', 'whitedvote', 'blackrvote', 'blackdvote', 'hispanicrvote', 'hispanicdvote', 'asianrvote', 'asiandvote', 'otherrvote', 'otherdvote', 'whiteturnout', 'blackturnout', 'hispanicturnout', 'asianturnout', 'otherturnout'])
 	cid=pd.merge(cid,exits,on='state_x')
 	return cid
 
 def calculate_districts(state,cd):
-	## FIX THIS - comps are not % of race voted, they are % race voters made of total electorate - need to use this to calculate % race voted
-	temp=cd[cd['state_x']==state]
+
+	state2=states[state].upper()
+
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/rawvote.csv','rU') as cfile:
+		reader=csv.reader(cfile)
+		exits=[row for row in reader if row[0]==state2]
+
+	rdists=0
+	ddists=0
+	totalvotes=0
+	totalrvotes=0
+	rcompete=0
+	for row in exits:
+		if int(row[2])+int(row[3])>0:
+			if int(row[2])>int(row[3]):
+				rdists=rdists+1
+			else:
+				ddists=ddists+1
+
+			totalvotes=totalvotes+int(row[2])+int(row[3])
+			totalrvotes=totalrvotes+int(row[2])
+
+			rper=int(row[2])/(int(row[2])+int(row[3]))
+			dper=int(row[3])/(int(row[2])+int(row[3]))
+
+			# print rper,dper
+			if abs(rper-dper)<.05:
+				rcompete=rcompete+1
+
+
+	temp=cd[(cd['state_x']==state) & (cd['real_district']!='ZZ')]
 	real_districts=list(set(temp['real_district']))
 	algo_districts=list(set(temp['HouseDistrict']))
 
-	temp['rvotes']=temp['white']*temp['whitercomp']*temp['whitervote']+temp['black']*temp['blackrcomp']*temp['blackrvote']+temp['hispanic']*temp['hispanicrcomp']*temp['hispanicrvote']+temp['asian']*temp['asianrcomp']*temp['asianrvote']+temp['other']*temp['otherrcomp']*temp['otherrvote']
-	temp['dvotes']=temp['white']*temp['whitercomp']*(1-temp['whitervote'])+temp['black']*temp['blackrcomp']*(1-temp['blackrvote'])+temp['hispanic']*temp['hispanicrcomp']*(1-temp['hispanicrvote'])+temp['asian']*temp['asianrcomp']*(1-temp['asianrvote'])+temp['other']*temp['otherrcomp']*(1-temp['otherrvote'])
+	temp['rvotes']=temp['white']*temp['whitervote']*temp['whiteturnout']+temp['black']*temp['blackrvote']*temp['blackturnout']+temp['hispanic']*temp['hispanicrvote']*temp['hispanicturnout']+temp['asian']*temp['asianrvote']*temp['asianturnout']+temp['other']*temp['otherrvote']*temp['otherturnout']
+	temp['dvotes']=temp['white']*temp['whitedvote']*temp['whiteturnout']+temp['black']*temp['blackdvote']*temp['blackturnout']+temp['hispanic']*temp['hispanicdvote']*temp['hispanicturnout']+temp['asian']*temp['asiandvote']*temp['asianturnout']+temp['other']*temp['otherdvote']*temp['otherturnout']
 
-	print 'Real District      R Vote      D Vote'
+	correct_dists=0
+	errors=[]
+
 	for dist in real_districts:
 		dist_temp=temp[temp['real_district']==dist]
+		if dist=='00':
+			real_compare=[row for row in exits if int(row[1])==1]
+		else:
+			real_compare=[row for row in exits if int(row[1])==int(dist)]
+		rc=real_compare[0]
 
-		tempr=dist_temp['rvotes'].sum()
-		tempd=dist_temp['dvotes'].sum()
+		if int(rc[2])+int(rc[3])>0:
 
-		print "{:<13}".format(dist),"{:>12}".format(int(1000*tempr/(tempr+tempd))/10),"{:>12}".format(int(1000*tempd/(tempr+tempd))/10)
+			rper=int(rc[2])/(int(rc[2])+int(rc[3]))
 
-	print ''
+			tempr=dist_temp['rvotes'].sum()
+			tempd=dist_temp['dvotes'].sum()
 
-	print 'Algo District      R Vote      D Vote'
+			if tempr/(tempr+tempd)>.5 and rper>.5:
+				correct_dists=correct_dists+1
+			if tempr/(tempr+tempd)<.5 and rper<.5:
+				correct_dists=correct_dists+1
+
+			errors.append(abs(tempr/(tempr+tempd)-rper))
+
+	algo_compete=0
+	algo_rdists=0
+	totalvotesa=0
+	totalrvotesa=0
+
 	for dist in algo_districts:
-		dist_temp=temp[temp['HouseDistrict']==dist]
+		if math.isnan(float(dist)):
+			dist_temp=temp[temp['HouseDistrict'].isnull()]
+		else:
+			dist_temp=temp[temp['HouseDistrict']==dist]
+
+		totalvotesa=totalvotesa+int(rc[2])+int(rc[3])
+		totalrvotesa=totalrvotesa+int(rc[2])
+		rper=totalrvotesa/totalvotesa
 
 		tempr=dist_temp['rvotes'].sum()
 		tempd=dist_temp['dvotes'].sum()
 
-		print "{:<13}".format(dist),"{:>12}".format(int(1000*tempr/(tempr+tempd))/10),"{:>12}".format(int(1000*tempd/(tempr+tempd))/10)
+		if tempr>tempd:
+			algo_rdists=algo_rdists+1
+
+		# print tempr/(tempr+tempd),tempd/(tempr+tempd)
+
+		if abs((tempr/(tempr+tempd))-(tempd/(tempr+tempd)))<.05:
+			algo_compete=algo_compete+1
+
+
+
+	# print 'Districts,real correct,avg error,r popvote %,% real r,% algo r,real competitive,algo competitive'
+	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/len(real_districts),rcompete,algo_compete
+
 
 def arrange_rawvote():
 	# this is a one-time thing to clean up the rawvote file (which comes from http://psephos.adam-carr.net/countries/u/usa/congress/house2014.txt)
@@ -490,23 +625,48 @@ def arrange_rawvote():
 def turnout_rawvote(cd):
 	# take the rawvote data, which has race by composition of electorate, and change it to turnout %age for each race
 	# pass in the block pandas datafile to compare
-	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/rawvote_altered.csv','rU') as cfile:
-		rawvote=[row for row in cfile]
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/exitpoll_noblanks.csv','rU') as cfile:
+		reader=csv.reader(cfile)
+		exits=[row for row in reader]
 
-	rawvote[0].append('whiteturnout')
-	rawvote[0].append('blackturnout')
-	rawvote[0].append('hispanicturnout')
-	rawvote[0].append('asianturnout')
-	rawvote[0].append('otherturnout')
+	# open up the election results file to get total votes in each state
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/rawvote.csv','rU') as cfile:
+		reader=csv.reader(cfile)
+		rawvote=[row for row in reader]
 
-	for row in rawvote[1:]:
-		state=row[0]
+	rawvote=pd.DataFrame([[row[0],row[1],int(row[2]),int(row[3])] for row in rawvote[1:]],columns=['state','district','republican','democrat'])
 
-		totalwhite=cd[cd['state_x']==state]['white'].sum()
-		totalblack=cd[cd['state_x']==state]['black'].sum()
-		totalhispanic=cd[cd['state_x']==state]['hispanic'].sum()
-		totalasian=cd[cd['state_x']==state]['asian'].sum()
-		totalother=cd[cd['state_x']==state]['other'].sum()
+	for row in exits[1:]:
+		state=states[row[0]].upper()
+		temp=rawvote[rawvote['state']==state]
+		totalvotes=temp['democrat'].sum()+temp['republican'].sum()
+
+		print state,len(temp),totalvotes
+
+		totalwhite=cd[cd['state_x']==row[0]]['white'].sum()
+		totalblack=cd[cd['state_x']==row[0]]['black'].sum()
+		totalhispanic=cd[cd['state_x']==row[0]]['hispanic'].sum()
+		totalasian=cd[cd['state_x']==row[0]]['asian'].sum()
+		totalother=cd[cd['state_x']==row[0]]['other'].sum()
+
+		whiteturnout=float(row[12])*totalvotes/totalwhite
+		blackturnout=float(row[13])*totalvotes/totalblack
+		hispanicturnout=float(row[14])*totalvotes/totalhispanic
+		asianturnout=float(row[15])*totalvotes/totalasian
+		otherturnout=float(row[16])*totalvotes/totalother
+
+		row.append(whiteturnout)
+		row.append(blackturnout)
+		row.append(hispanicturnout)
+		row.append(asianturnout)
+		row.append(otherturnout)
+
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/rawvote_altered.csv','wb') as cfile:
+		writer=csv.writer(cfile)
+		for row in exits:
+			writer.writerow(row)
+
+
 
 def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
