@@ -503,6 +503,8 @@ def calculate_districts(state,cd):
 	temp['dvotes']=temp['white']*temp['whitedvote']*temp['whiteturnout']+temp['black']*temp['blackdvote']*temp['blackturnout']+temp['hispanic']*temp['hispanicdvote']*temp['hispanicturnout']+temp['asian']*temp['asiandvote']*temp['asianturnout']+temp['other']*temp['otherdvote']*temp['otherturnout']
 
 	correct_dists=0
+	real40white=0
+
 	errors=[]
 
 	for dist in real_districts:
@@ -527,10 +529,17 @@ def calculate_districts(state,cd):
 
 			errors.append(abs(tempr/(tempr+tempd)-rper))
 
+		whites=dist_temp['white'].sum()
+		others=dist_temp['black'].sum()+dist_temp['hispanic'].sum()+dist_temp['asian'].sum()+dist_temp['other'].sum()
+
+		if whites/(whites+others)<.5:
+			real40white=real40white+1
+
 	algo_compete=0
 	algo_rdists=0
 	totalvotesa=0
 	totalrvotesa=0
+	algo40white=0
 
 	for dist in algo_districts:
 		if math.isnan(float(dist)):
@@ -538,25 +547,23 @@ def calculate_districts(state,cd):
 		else:
 			dist_temp=temp[temp['HouseDistrict']==dist]
 
-		totalvotesa=totalvotesa+int(rc[2])+int(rc[3])
-		totalrvotesa=totalrvotesa+int(rc[2])
-		rper=totalrvotesa/totalvotesa
-
 		tempr=dist_temp['rvotes'].sum()
 		tempd=dist_temp['dvotes'].sum()
 
 		if tempr>tempd:
 			algo_rdists=algo_rdists+1
 
-		# print tempr/(tempr+tempd),tempd/(tempr+tempd)
-
 		if abs((tempr/(tempr+tempd))-(tempd/(tempr+tempd)))<.05:
 			algo_compete=algo_compete+1
 
+		whites=dist_temp['white'].sum()
+		others=dist_temp['black'].sum()+dist_temp['hispanic'].sum()+dist_temp['asian'].sum()+dist_temp['other'].sum()
 
+		if whites/(whites+others)<.5:
+			algo40white=algo40white+1
 
-	# print 'Districts,real correct,avg error,r popvote %,% real r,% algo r,real competitive,algo competitive'
-	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/len(real_districts),rcompete,algo_compete
+	# print 'Districts,real correct,avg error,r popvote %,% real r,% algo r,real competitive,algo competitive,real minority districts, algo minority districts'
+	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/(rdists+ddists),rcompete,algo_compete,real40white,algo40white
 
 
 def arrange_rawvote():
