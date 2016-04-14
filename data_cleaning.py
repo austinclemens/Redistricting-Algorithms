@@ -11,7 +11,7 @@ import difflib
 
 pd.set_option('display.width',150)
 
-realstate=['AK','AR','CA','CO','FL','GA','IA','IL','KS','KY','LA','ME','MI','MN','MS','NC','NH','NY','OH','OR','PA','SC','SD','WI','VA','TX','WV']
+realstate=['AR','CA','CO','FL','GA','IA','IL','KS','KY','LA','ME','MI','MN','MS','NC','NH','NY','OH','OR','PA','SC','WI','VA','TX','WV']
 
 states = {
         'AK': 'Alaska',
@@ -292,8 +292,6 @@ def full_script():
 	b.columns=['BlockID2','HouseDistrict','state']
 	cd=pd.merge(c,b,left_on='BlockID',right_on='BlockID2',how='outer')
 
-	return cd
-
 	# need to create a column that tracks how many blocks are in each district - a count of duplicates
 	# and then, when you get rid of blocks and boil the data set down to algorithm/district combos, need
 	# to know how many blocks from a given district are in a given HouseDistrict
@@ -499,13 +497,23 @@ def calculate_districts(state,cd):
 	real_districts=list(set(temp['real_district']))
 	algo_districts=list(set(temp['HouseDistrict']))
 
+	if len(algo_districts)>70:
+		algo_districts=['00']
+
+	# print state2
+	# print real_districts
+	# print algo_districts
+
 	temp['rvotes']=temp['white']*temp['whitervote']*temp['whiteturnout']+temp['black']*temp['blackrvote']*temp['blackturnout']+temp['hispanic']*temp['hispanicrvote']*temp['hispanicturnout']+temp['asian']*temp['asianrvote']*temp['asianturnout']+temp['other']*temp['otherrvote']*temp['otherturnout']
 	temp['dvotes']=temp['white']*temp['whitedvote']*temp['whiteturnout']+temp['black']*temp['blackdvote']*temp['blackturnout']+temp['hispanic']*temp['hispanicdvote']*temp['hispanicturnout']+temp['asian']*temp['asiandvote']*temp['asianturnout']+temp['other']*temp['otherdvote']*temp['otherturnout']
 
 	correct_dists=0
 	real40white=0
+	simulated_rdists=0
 
 	errors=[]
+
+	# print 'REAL DISTRICTS'
 
 	for dist in real_districts:
 		dist_temp=temp[temp['real_district']==dist]
@@ -535,11 +543,18 @@ def calculate_districts(state,cd):
 		if whites/(whites+others)<.5:
 			real40white=real40white+1
 
+		if tempr/(tempr+tempd)>.5:
+			simulated_rdists=simulated_rdists+1
+
+		# print whites,others,tempr,tempd,tempr/(tempr+tempd)
+
 	algo_compete=0
 	algo_rdists=0
 	totalvotesa=0
 	totalrvotesa=0
 	algo40white=0
+
+	# print 'ALGORITHM DISTRICTS'
 
 	for dist in algo_districts:
 		if math.isnan(float(dist)):
@@ -562,8 +577,14 @@ def calculate_districts(state,cd):
 		if whites/(whites+others)<.5:
 			algo40white=algo40white+1
 
-	# print 'Districts,real correct,avg error,r popvote %,% real r,% algo r,real competitive,algo competitive,real minority districts, algo minority districts'
-	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/(rdists+ddists),rcompete,algo_compete,real40white,algo40white
+		totalvotesa=totalvotesa+tempr+tempd
+		totalrvotesa=totalrvotesa+tempr
+
+		# print whites,others,tempr,tempd,tempr/(tempr+tempd)
+
+	# print 'Districts,real correct,avg error,r popvote %,% real r,% algo r,% simulated r,real competitive,algo competitive,real minority districts, algo minority districts'
+	# print totalrvotesa/totalvotesa
+	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/(rdists+ddists),simulated_rdists/(rdists+ddists),rcompete,algo_compete,real40white,algo40white
 
 
 def arrange_rawvote():
