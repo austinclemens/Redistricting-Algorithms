@@ -297,6 +297,7 @@ def full_script():
 	# to know how many blocks from a given district are in a given HouseDistrict
 
 	# Count county/district/state duplicates AND county/district/state/algorithm district dupes
+	cd=cd[pd.notnull(cd['HouseDistrict'])]
 	cd['blocks']=cd.groupby(['state_x','CountyFP','District'])['BlockID'].transform('count')
 	cd['ADblocks']=cd.groupby(['state_x','CountyFP','District','HouseDistrict'])['BlockID'].transform('count')
 
@@ -323,119 +324,18 @@ def full_script():
 	# big re-ordering of CID just to make it a little cleaner
 	cid=cid[['state_x','StateFP','County','CountyFP','District','Name','Namelsad','BlockID','HouseDistrict','real_district','blocks','ADblocks','percent_district_in_AlgoHouseDist']]
 
+	# lowercasing stuff is useful later
+	cid['County'] = cid['County'].str.lower()
+	cid['Name'] = cid['Name'].str.lower()
+	cid['Namelsad'] = cid['Namelsad'].str.lower()
+	cid['County']=cid.apply(lambda x: x['County'].replace('county','').strip().lower(),axis=1)
+
 	return cid
 
 	# so now you have a nice thing: 186k row matrix of VTDs matched to algorithm districts.
 	# The problem is that the Harvard file are not well-aligned with the census files, so
 	# to match them, we have to do something like get all districts that are in Alabama in
 	# CountyFP 001, then fuzzy match on district code, name, and namelsad. 
-	# following is sa look at how each state might be matched
-
-	# State by state breakdown of the voting files FOR 2010:
-
-	# AK: 1 district
-	# AL: remove leading 0s from countyFP (ie 1,2,3), match to fips_cnty then fuzzy match namelsad to precinct. vars: g2010_USH_dv, g2010_USH_rv, g2010_USH_dv2, g2010_USH_rv2
-	# AZ: none
-	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2010_USH_dv	g2010_USH_rv
-	# CA: IDGI. it's like a slightly shorter block id and it doesn't seem to match anything I have.
-	# CO: It seems like vtd is an exact match for District. g2010_USH_rv	g2010_USH_dv
-	# CT: This is based on townships or something? I don't see how it can be done.
-	# DE: 1 district
-	# FL: have to pull apart the precinct column, which looks like: 'ALA0001' - this matches to County: 'Alachua County' and District: '0001'. it's not entirely clear how that first letter thing works. g2010_USH_dv	g2010_USH_rv
-	# GA: none
-	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
-	# ID: can't be done. Lots of aggregation in the Harvard files.
-	# IL: none
-	# IN: none
-	# IA: none
-	# KS: easy - match County to county and then vtd to District. g2010_USH_dv	g2010_USH_rv
-	# KY - investigate - KY is not in cid why?
-	# LA: no way to match
-	# ME: no way to match
-	# MD: no way to match
-	# MA: no way to match
-	# MI: no way to match 
-	# MN: match county to int(County) and then Name to precinct. g2010_USH_dv	g2010_USH_rv
-	# MS: match County to county and then Name to precinct. g2010_USH_dv	g2010_USH_rv	g2010_USH_dv2	g2010_USH_rv2
-	# MO: match county to County and then... precinct should match name but the match is *very* inexact. I'm not sure traditional word distance kinda thing will work. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2 g2010_USH_dv3	g2010_USH_rv3
-	# MT: 1 district
-	# NE: none
-	# NV: this is basically perfect - County to county_name, then precinct to Name - the 'PRECINCT 16' part of name, not 'CHURCHILL PREINCT 16', g2010_USH_dv	g2010_USH_rv
-	# NH: County to county and town to Name g2012_USH_rv	g2012_USH_dv
-	# NJ: none
-	# NM: none
-	# NY: match County to county_name and vtd08 to District. g2010_USH_dv	g2010_USH_rv
-	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
-	# ND: 1 district
-	# OH: County to county and Name to precinct_code. dv dv2 dv3
-	# OK: look at precinct column, which looks like this: "ALFALFA CO. PCT 020110" - the first bit matches County, the number matches up to District but only the last 3 digits (110), dv and dv2
-	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
-	# PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv
-	# RI: no RI rows in CID
-	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
-	# SD: 1 district
-	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
-	# TX: County to county and District to vtd, dv only
-	# UT: none
-	# VT: 1 district
-	# VA: County to county and then fuzzy Name to precinct, dv only
-	# WA: County to county and Name to precinct, dv only
-	# WV: at first blush these match up but some counties with unusual schemes do not sync between the datasets, I would avoid
-	# WI: match mcd to Name, dv only
-	# WY: 1 district
-
-	# State by state breakdown of the voting files FOR 2012:
-
-	# AK: 1 district
-	# AL: fuzzy match County to county then fuzzy match namelsad to precinct. vars: g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2
-	# AZ: remove 'County' from County and then match to county, take the first 2 (3?) digits of precinct and match to District. There is an election total row but that wil be ignored with this procedure g2012_USH_dv	g2012_USH_rv
-	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2012_USH_dv	g2012_USH_rv
-	# CA: none
-	# CO: none
-	# CT: This is based on townships or something? I don't see how it can be done.
-	# DE: 1 district
-	# FL: none
-	# GA: county is a match with County (although county has no 'county suffix') and precinct is an exact match for district. g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2, g2012_USH_dv3, g2012_USH_rv3, g2012_USH_dv4, g2012_USH_rv4
-	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
-	# ID: Can't be done.
-	# IL: Match County to county, match precinct to Name. precinct looks like: 'Ellington PCT 3' vs name: ELLINGTON 3 - so maybe just remove pct g2012_USH_dv g2012_USH_rv g2012_USH_dv2 g2012_USH_rv2 g2012_USH_dv3 g2012_USH_rv3
-	# IN: none
-	# IA: none
-	# KS: easy - match County to county and then vtd to District. g2012_USH_dv	g2012_USH_rv
-	# KY - investigate - KY is not in cid why?
-	# LA: no way to match
-	# ME: no way to match
-	# MD: no way to match
-	# MA: no way to match
-	# MI: none
-	# MN: match county to int(County) and then int(district) to precinct. g2010_USH_dv	g2010_USH_rv
-	# MS: match County to county and then Name to precinct. g2012_USH_dv	g2012_USH_rv	g2012_USH_dv2	g2012_USH_rv2
-	# MO: none
-	# MT: 1 district
-	# NE: match county to County and Name to precinct g2012_USH_dv	g2012_USH_rv
-	# NV: none
-	# NH: County to county and precinct to Name g2012_USH_rv	g2012_USH_dv
-	# NJ: none
-	# NM: county to County and District to precinct. g2012_USH_rv	g2012_USH_tv
-	# NY: none
-	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
-	# ND: 1 district
-	# OH: none
-	# OK: match County to county and then District to the last 3 (4?) digits of precinct, dv and dv2
-	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
-	# PA: match County to county and District to precinct_code, but there is no house race here?
-	# RI: no RI rows in CID
-	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
-	# SD: 1 district
-	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
-	# TX: County to county and District to vtd, dv only
-	# UT: none
-	# VT: 1 district
-	# VA: County to county and then fuzzy Name to precinct, dv only
-	# WA: County to county and Name to precinct_name, dv only
-	# WV: none
-	# WI: none
-	# WY: 1 district
 
 	# states with missing CID rows: RI, OR, KY
 	# this is due to missing fips codes for counties - doesn't seem like having them would help but for matching more states but come back to this
@@ -695,7 +595,6 @@ def turnout_rawvote(cd):
 			writer.writerow(row)
 
 
-
 def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
@@ -731,19 +630,179 @@ def merge_harvard(cid):
 
 	# cid columns: u'state_x', u'StateFP', u'County', u'CountyFP', u'District', u'Name'
 	# merge in each state file following the rules above.
+
+	# State by state breakdown of the voting files FOR 2010:
+
+	# AK: 1 district
+	# AL: remove leading 0s from countyFP (ie 1,2,3), match to fips_cnty then fuzzy match namelsad to precinct. vars: g2010_USH_dv, g2010_USH_rv, g2010_USH_dv2, g2010_USH_rv2
+	# AZ: none
+	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2010_USH_dv	g2010_USH_rv
+	# CA: IDGI. it's like a slightly shorter block id and it doesn't seem to match anything I have.
+	# CO: It seems like vtd is an exact match for District. g2010_USH_rv	g2010_USH_dv
+	# CT: This is based on townships or something? I don't see how it can be done.
+	# DE: 1 district
+	# FL: have to pull apart the precinct column, which looks like: 'ALA0001' - this matches to County: 'Alachua County' and District: '0001'. it's not entirely clear how that first letter thing works. g2010_USH_dv	g2010_USH_rv
+	# GA: none
+	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
+	# ID: can't be done. Lots of aggregation in the Harvard files.
+	# IL: none
+	# IN: none
+	# IA: none
+	# KS: easy - match County to county and then vtd to District. g2010_USH_dv	g2010_USH_rv
+	# KY - investigate - KY is not in cid why?
+	# LA: no way to match
+	# ME: no way to match
+	# MD: no way to match
+	# MA: no way to match
+	# MI: no way to match 
+	# MN: match county to int(County) and then Name to precinct. g2010_USH_dv	g2010_USH_rv
+	# MS: match County to county and then Name to precinct. g2010_USH_dv	g2010_USH_rv	g2010_USH_dv2	g2010_USH_rv2
+	# MO: match county to County and then... precinct should match name but the match is *very* inexact. I'm not sure traditional word distance kinda thing will work. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2 g2010_USH_dv3	g2010_USH_rv3
+	# MT: 1 district
+	# NE: none
+	# NV: this is basically perfect - County to county_name, then precinct to Name - the 'PRECINCT 16' part of name, not 'CHURCHILL PREINCT 16', g2010_USH_dv	g2010_USH_rv
+	# NH: County to county and town to Name g2012_USH_rv	g2012_USH_dv
+	# NJ: none
+	# NM: none
+	# NY: match County to county_name and vtd08 to District. g2010_USH_dv	g2010_USH_rv
+	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
+	# ND: 1 district
+	# OH: County to county and Name to precinct_code. dv dv2 dv3
+	# OK: look at precinct column, which looks like this: "ALFALFA CO. PCT 020110" - the first bit matches County, the number matches up to District but only the last 3 digits (110), dv and dv2
+	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
+	# PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv
+	# RI: no RI rows in CID
+	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
+	# SD: 1 district
+	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
+	# TX: County to county and District to vtd, dv only
+	# UT: none
+	# VT: 1 district
+	# VA: County to county and then fuzzy Name to precinct, dv only
+	# WA: County to county and Name to precinct, dv only
+	# WV: at first blush these match up but some counties with unusual schemes do not sync between the datasets, I would avoid
+	# WI: match mcd to Name, dv only
+	# WY: 1 district
+
+	# State by state breakdown of the voting files FOR 2012:
+
+	# AK: 1 district
+	# AL: fuzzy match County to county then fuzzy match namelsad to precinct. vars: g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2
+	# AZ: remove 'County' from County and then match to county, take the first 2 (3?) digits of precinct and match to District. There is an election total row but that wil be ignored with this procedure g2012_USH_dv	g2012_USH_rv
+	# AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2012_USH_dv	g2012_USH_rv
+	# CA: none
+	# CO: none
+	# CT: This is based on townships or something? I don't see how it can be done.
+	# DE: 1 district
+	# FL: none
+	# GA: county is a match with County (although county has no 'county suffix') and precinct is an exact match for district. g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2, g2012_USH_dv3, g2012_USH_rv3, g2012_USH_dv4, g2012_USH_rv4
+	# HI: something is up here and I don't know what... the census stuff I downloaded is circa 2011 yet the 2010 file has totally different names for districts of matching numbers. I think this one is best left alone.
+	# ID: Can't be done.
+	# IL: Match County to county, match precinct to Name. precinct looks like: 'Ellington PCT 3' vs name: ELLINGTON 3 - so maybe just remove pct g2012_USH_dv g2012_USH_rv g2012_USH_dv2 g2012_USH_rv2 g2012_USH_dv3 g2012_USH_rv3
+	# IN: none
+	# IA: none
+	# KS: easy - match County to county and then vtd to District. g2012_USH_dv	g2012_USH_rv
+	# KY - investigate - KY is not in cid why?
+	# LA: no way to match
+	# ME: no way to match
+	# MD: no way to match
+	# MA: no way to match
+	# MI: none
+	# MN: match county to int(County) and then int(district) to precinct. g2010_USH_dv	g2010_USH_rv
+	# MS: match County to county and then Name to precinct. g2012_USH_dv	g2012_USH_rv	g2012_USH_dv2	g2012_USH_rv2
+	# MO: none
+	# MT: 1 district
+	# NE: match county to County and Name to precinct g2012_USH_dv	g2012_USH_rv
+	# NV: none
+	# NH: County to county and precinct to Name g2012_USH_rv	g2012_USH_dv
+	# NJ: none
+	# NM: county to County and District to precinct. g2012_USH_rv	g2012_USH_tv
+	# NY: none
+	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
+	# ND: 1 district
+	# OH: none
+	# OK: match County to county and then District to the last 3 (4?) digits of precinct, dv and dv2
+	# OR: I don't think these can be matched but check cid - for some reason most of OR dropped
+	# PA: match County to county and District to precinct_code, but there is no house race here?
+	# RI: no RI rows in CID
+	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
+	# SD: 1 district
+	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
+	# TX: County to county and District to vtd, dv only
+	# UT: none
+	# VT: 1 district
+	# VA: County to county and then fuzzy Name to precinct, dv only
+	# WA: County to county and Name to precinct_name, dv only
+	# WV: none
+	# WI: none
+	# WY: 1 district
 	for state in data_dict.keys():
 		for year in data_dict[state].keys():
 
 			temp=data_dict[state][year]
 			# all the merge rules go here
+			# ALABAMA
 			if state=='AL':
 				if int(year)==2010:
-					temp['fips_cnty']=temp['fips_cnty'].astype(int)
-					temp['new'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
-					temp.apply(lambda x: x['precinct'])
+					tempcid=cid[cid['state_x']==state]
+					field='precinct'
+					a=standard_state(field,temp,state,year,tempcid)
 
-				elif int(year)==2012:
-					pass
+					cid2=pd.merge(cid,a,on=['Name','County'],how='outer')
+					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv','g2010_USH_dv2','g2010_USH_rv2']]
+					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
+
+					cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
+					cid2['g2010_USH_rv2']=cid2['g2010_USH_rv2'].replace('', np.nan)
+					cid2['g2010_USH_dv']=cid2['g2010_USH_dv'].replace('', np.nan)
+					cid2['g2010_USH_dv2']=cid2['g2010_USH_dv2'].replace('', np.nan)
+
+
+					cid3['g2010_USH_dv']=cid3['g2010_USH_dv'].replace('', np.nan)
+					cid3['g2010_USH_dv2']=cid3['g2010_USH_dv2'].replace('', np.nan)
+
+
+			# compares=newmatcher(set)
+			# temp['Namelsad'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
+			# temp=temp[['Namelsad','g2010_USH_dv','g2010_USH_rv','g2010_USH_dv2','g2010_USH_rv2']]
+			# temp['state_x']='AL'
+			# cid2=pd.merge(cid,temp,how='outer',on=['Namelsad','state_x'])
+
+			# cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
+			# cid2['g2010_USH_rv2']=cid2['g2010_USH_rv2'].replace('', np.nan)
+
+		# elif int(year)==2012:
+		# 	temp['new'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
+
+for blah in ['01','02','03','04','05','06','07']:
+	try:
+		print str(cid3[cid3['real_district']==blah]['g2010_USH_rv'].astype(float).sum()).ljust(12),'| ',cid3[cid3['real_district']==blah]['g2010_USH_dv'].astype(float).sum()
+	except:
+		print ''
+
+for blah in [0,1,2,3,4,5,6]:
+	try:
+		print str(cid3[cid3['HouseDistrict']==blah]['g2010_USH_rv'].astype(float).sum()).ljust(12),'| ',cid3[cid3['HouseDistrict']==blah]['g2010_USH_dv'].astype(float).sum()
+	except:
+		print ''
+
+def standard_state(field,temp,state,year,tempcid):
+	temp['county']=temp.apply(lambda x: x['county'].replace('county','').strip().lower(),axis=1)
+	temp[field]=temp.apply(lambda x: x[field].lower(),axis=1)
+
+	counties=list(set(tempcid[tempcid['state_x']==state]['County']))
+	counties=[county.replace('county','').strip().lower() for county in counties]
+	master_list=[]
+	for county in counties:
+		compare2=list(set(temp[temp['county']==county][field]))
+		compare1=tempcid[tempcid['County']==county]['Namelsad']
+
+		matches=unique_matcher(compare1,compare2)
+		for key in matches.keys():
+			master_list.append([county,key,matches[key]])
+
+	a=pd.DataFrame(master_list,columns=['County','Name','precinct'])
+	return a
 
 def fuzzy_matcher(string,comparison):
 	# function for fuzzy matching. Cutoff is an important variable - make it bigger and it will prevent false matches
@@ -754,4 +813,70 @@ def fuzzy_matcher(string,comparison):
 	except:
 		res=''
 	return res
+
+def unique_matcher(cidlist,harvardlist):
+	# takes lists of precinct names and matches them uniquely ie one harvard name to one cidname
+	dict={}
+	harvardlist=[prec for prec in harvardlist if 'provisional' not in prec and 'absentee' not in prec]
+
+	# the stupid way to do this is just to go through all possible matches, find the highest in that iteration, take that match,
+	# then repeat with the two lists minus those matched items. So yeah. That's how I'm going to do it.
+
+	for i in range(0,len(cidlist)):
+		max=.25
+		for prec in cidlist:
+			for prec2 in harvardlist:
+				score = difflib.SequenceMatcher(None,prec,prec2).ratio()
+				if score>max:
+					max=score
+					maxprec=prec
+					maxprec2=prec2
+
+		try:
+			print max, maxprec, maxprec2
+			if max>.25:
+				dict[maxprec]=maxprec2
+		except:
+			pass
+
+		try:
+			cidlist=[cid for cid in cidlist if cid!=maxprec]
+			harvardlist=[cid for cid in harvardlist if cid!=maxprec2]
+		except:
+			cidlist=[]
+			harvardlist=[]
+
+	return dict
+
+def countymatch(county):
+	harvardlist=list(set(temp[(temp['county']==county)]['precinct']))
+	cidlist=list(set(cid[(cid['state_x']=='AL') & (cid['County']==county)]['Name']))
+	pp.pprint(unique_matcher(cidlist,harvardlist))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
