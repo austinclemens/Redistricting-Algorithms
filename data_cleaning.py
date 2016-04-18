@@ -8,6 +8,7 @@ import MySQLdb
 import os
 import pandas as pd
 import difflib
+import numpy as np
 
 pd.set_option('display.width',150)
 
@@ -329,6 +330,8 @@ def full_script():
 	cid['Name'] = cid['Name'].str.lower()
 	cid['Namelsad'] = cid['Namelsad'].str.lower()
 	cid['County']=cid.apply(lambda x: x['County'].replace('county','').strip().lower(),axis=1)
+	cid['County']=cid.apply(lambda x: x['County'].replace('.',''),axis=1)
+	cid['County']=cid.apply(lambda x: x['County'].replace(' ',''),axis=1)
 
 	return cid
 
@@ -487,14 +490,14 @@ def calculate_districts(state,cd):
 	print state,len(real_districts),correct_dists,sum(errors)/len(errors),(totalrvotes/totalvotes),(rdists/(rdists+ddists)),algo_rdists/(rdists+ddists),simulated_rdists/(rdists+ddists),rcompete,algo_compete,real40white,algo40white
 
 
-def arrange_rawvote():
+def arrange_rawvote(rv='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/rawvote.txt'):
 	# this is a one-time thing to clean up the rawvote file (which comes from http://psephos.adam-carr.net/countries/u/usa/congress/house2014.txt)
 	states=['ALABAMA', 'ALASKA', 'ARIZONA', 'ARKANSAS', 'CALIFORNIA', 'COLORADO', 'CONNECTICUT', 'DELAWARE', 'FLORIDA', 'GEORGIA', 'HAWAII', 'IDAHO', 'ILLINOIS', 'INDIANA', 'IOWA', 'KANSAS', 'KENTUCKY', 'LOUISIANA', 'MAINE', 'MARYLAND', 'MASSACHUSETTS', 'MICHIGAN', 'MINNESOTA', 'MISSISSIPPI', 'MISSOURI', 'MONTANA', 'NEBRASKA', 'NEVADA', 'NEW HAMPSHIRE', 'NEW JERSEY', 'NEW MEXICO', 'NEW YORK', 'NORTH CAROLINA', 'NORTH DAKOTA', 'OHIO', 'OKLAHOMA', 'OREGON', 'PENNSYLVANIA', 'RHODE ISLAND', 'SOUTH CAROLINA', 'SOUTH DAKOTA', 'TENNESSEE', 'TEXAS', 'UTAH', 'VERMONT', 'VIRGINIA', 'WASHINGTON', 'WEST VIRGINIA', 'WISCONSIN', 'WYOMING']
 	first=1
 	master=[]
 	current_state=''
 
-	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/rawvote.txt','rU') as cfile:
+	with open(rv,'rU') as cfile:
 		rawvote=[row for row in cfile]
 
 	for row in rawvote[6:]:
@@ -599,15 +602,6 @@ def merge_harvard(cid):
 	prec_votes_folder='/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/precinct_votes'
 	state_files=os.listdir(prec_votes_folder)
 	state_files=[file for file in state_files if file[-3:]=='tab']
-
-	cid['g2012_USH_dv']=0
-	cid['g2012_USH_rv']=0
-	cid['g2012_USH_dv2']=0
-	cid['g2012_USH_rv2']=0
-	cid['g2012_USH_dv3']=0
-	cid['g2012_USH_rv3']=0
-	cid['g2012_USH_dv4']=0
-	cid['g2012_USH_rv4']=0
 
 	# load all state files into the data_dict
 	data_dict={}
@@ -748,55 +742,109 @@ def merge_harvard(cid):
 					field='precinct'
 					a=standard_state(field,temp,state,year,tempcid)
 
-					cid2=pd.merge(cid,a,on=['Name','County'],how='outer')
-					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv','g2010_USH_dv2','g2010_USH_rv2']]
+					cid2=pd.merge(tempcid,a,on=['Name','County'],how='outer')
+					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv']]
 					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
 
 					cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
-					cid2['g2010_USH_rv2']=cid2['g2010_USH_rv2'].replace('', np.nan)
 					cid2['g2010_USH_dv']=cid2['g2010_USH_dv'].replace('', np.nan)
-					cid2['g2010_USH_dv2']=cid2['g2010_USH_dv2'].replace('', np.nan)
 
+					# calculate % r for each real district and each algo district
+					rdists=list(set(cid2['real_district']))
+					adists=list(set(cid2['HouseDistrict']))
+					rdists=[r for r in rdists if type(r)==type('a')]
+					adists=[a for a in adists if type(a)==type('a')]
 
-					cid3['g2010_USH_dv']=cid3['g2010_USH_dv'].replace('', np.nan)
-					cid3['g2010_USH_dv2']=cid3['g2010_USH_dv2'].replace('', np.nan)
+					# couple little notes here.
+					# first, district 01 appears to have been mis-coded by the harvard people - it shows ~120k democratic votes and
+					# ~20k republican votes, but these are in fact the totals for republican votes and constitution party votes
+					# respectively, so this next bit hand fixes that problem. 2nd, it's important to keep in mind that if you want
+					# to check real districts you need to dedupe first to get rid of the entries for algorithm districts that break
+					# bounds - this should do it: cid3=cid2.drop_duplicates(['state_x','County','Name'])
+					# that will work for everything.
 
+					# also, it turns out that USH_dv2 and etc are useless. You don't know what the 2nd district is.
 
-			# compares=newmatcher(set)
-			# temp['Namelsad'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
-			# temp=temp[['Namelsad','g2010_USH_dv','g2010_USH_rv','g2010_USH_dv2','g2010_USH_rv2']]
-			# temp['state_x']='AL'
-			# cid2=pd.merge(cid,temp,how='outer',on=['Namelsad','state_x'])
+					cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
+					cid2.ix[cid2.real_district=='01','g2010_USH_dv']=0
 
-			# cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
-			# cid2['g2010_USH_rv2']=cid2['g2010_USH_rv2'].replace('', np.nan)
+					for i,dist in enumerate(rdists):
+						cid3=cid2.drop_duplicates(['state_x','County','Name'])
+						rdist_per=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum())
+						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['g2010_USH_rv'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['g2010_USH_rv'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['g2010_USH_dv'].astype(float).sum())
+						rrvotes=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()
+						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
+						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes
 
-		# elif int(year)==2012:
-		# 	temp['new'] = temp.apply(lambda x: fuzzy_matcher(x['precinct'], cid[(cid['state_x']==state) & (cid['CountyFP'].astype(int)==x['fips_cnty'])]['Namelsad']),axis=1)
+				elif int(year)==2012:
+					tempcid=cid[cid['state_x']==state]
+					field='precinct'
+					a=standard_state(field,temp,state,year,tempcid)
 
-for blah in ['01','02','03','04','05','06','07']:
-	try:
-		print str(cid3[cid3['real_district']==blah]['g2010_USH_rv'].astype(float).sum()).ljust(12),'| ',cid3[cid3['real_district']==blah]['g2010_USH_dv'].astype(float).sum()
-	except:
-		print ''
+					cid2=pd.merge(tempcid,a,on=['Name','County'],how='outer')
+					temp2=temp[['precinct','g2012_USH_dv','g2012_USH_rv']]
+					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
 
-for blah in [0,1,2,3,4,5,6]:
-	try:
-		print str(cid3[cid3['HouseDistrict']==blah]['g2010_USH_rv'].astype(float).sum()).ljust(12),'| ',cid3[cid3['HouseDistrict']==blah]['g2010_USH_dv'].astype(float).sum()
-	except:
-		print ''
+					cid2['g2012_USH_rv']=cid2['g2012_USH_rv'].replace('', np.nan)
+					cid2['g2012_USH_dv']=cid2['g2012_USH_dv'].replace('', np.nan)
+
+					# calculate % r for each real district and each algo district
+					rdists=list(set(cid2['real_district']))
+					adists=list(set(cid2['HouseDistrict']))
+					rdists=[r for r in rdists if type(r)==type('a')]
+					adists=[a for a in adists if type(a)==type('a')]
+
+					for i,dist in enumerate(rdists):
+						cid3=cid2.drop_duplicates(['state_x','County','Name'])
+						rdist_per=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum())
+						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_rv'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_rv'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_dv'].astype(float).sum())
+						rrvotes=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()
+						rdvotes=cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum()
+						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes
+
+			if state=='AZ':
+				if int(year)==2012:
+					tempcid=cid[cid['state_x']==state]
+					field='precinct'
+					a=standard_state(field,temp,state,year,tempcid)
+					# return a
+
+					cid2=pd.merge(tempcid,a,on=['Name','County'],how='outer')
+					temp2=temp[['precinct','g2012_USH_dv','g2012_USH_rv']]
+					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
+
+					cid2['g2012_USH_rv']=cid2['g2012_USH_rv'].replace('', np.nan)
+					cid2['g2012_USH_dv']=cid2['g2012_USH_dv'].replace('', np.nan)
+
+					# calculate % r for each real district and each algo district
+					rdists=list(set(cid2['real_district']))
+					adists=list(set(cid2['HouseDistrict']))
+					rdists=[r for r in rdists if type(r)==type('a')]
+					adists=[a for a in adists if type(a)==type('a')]
+
+					for i,dist in enumerate(rdists):
+						cid3=cid2.drop_duplicates(['state_x','County','Name'])
+						rdist_per=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum())
+						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_rv'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_rv'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['g2012_USH_dv'].astype(float).sum())
+						rrvotes=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()
+						rdvotes=cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum()
+						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes
 
 def standard_state(field,temp,state,year,tempcid):
 	temp['county']=temp.apply(lambda x: x['county'].replace('county','').strip().lower(),axis=1)
+	temp['county']=temp.apply(lambda x: x['county'].replace(' ',''),axis=1)
 	temp[field]=temp.apply(lambda x: x[field].lower(),axis=1)
 
 	counties=list(set(tempcid[tempcid['state_x']==state]['County']))
 	counties=[county.replace('county','').strip().lower() for county in counties]
 	master_list=[]
 	for county in counties:
+		print county
 		compare2=list(set(temp[temp['county']==county][field]))
-		compare1=tempcid[tempcid['County']==county]['Namelsad']
+		compare1=list(set(tempcid[tempcid['County']==county]['Name']))
 
+		# print 'C1',compare1
+		# print 'C2',compare2
 		matches=unique_matcher(compare1,compare2)
 		for key in matches.keys():
 			master_list.append([county,key,matches[key]])
@@ -815,6 +863,7 @@ def fuzzy_matcher(string,comparison):
 	return res
 
 def unique_matcher(cidlist,harvardlist):
+	# print cidlist,harvardlist
 	# takes lists of precinct names and matches them uniquely ie one harvard name to one cidname
 	dict={}
 	harvardlist=[prec for prec in harvardlist if 'provisional' not in prec and 'absentee' not in prec]
@@ -822,29 +871,34 @@ def unique_matcher(cidlist,harvardlist):
 	# the stupid way to do this is just to go through all possible matches, find the highest in that iteration, take that match,
 	# then repeat with the two lists minus those matched items. So yeah. That's how I'm going to do it.
 
+	# ooooook never mind that way is way too slow with certain counties. Instead:
+	# 1) build a len(cidlist) x len(harvardlist) matrix where each entry is the difflib score
+	# 2) find the max value in the matrix, and use that i,j to identify the harvard/cid match
+	# 3) find the next highest value, check to make sure i,j haven't already been used...
+	# 4) etc.
+	# as it turns out, just zero out i and j
+
+	nplist=[]
+	for prec in cidlist:
+		rowlist=[]
+		for prec2 in harvardlist:
+			score = difflib.SequenceMatcher(None,prec,prec2).ratio()
+			rowlist.append(score)
+		nplist.append(rowlist)
+
+	score_array=np.array(nplist)
+
 	for i in range(0,len(cidlist)):
-		max=.25
-		for prec in cidlist:
-			for prec2 in harvardlist:
-				score = difflib.SequenceMatcher(None,prec,prec2).ratio()
-				if score>max:
-					max=score
-					maxprec=prec
-					maxprec2=prec2
+		maxi=score_array.max()
+		loc=np.argmax(score_array)
+		row=int(math.floor(loc/len(harvardlist)))
+		col=int(loc-(row*len(harvardlist)))
 
-		try:
-			print max, maxprec, maxprec2
-			if max>.25:
-				dict[maxprec]=maxprec2
-		except:
-			pass
-
-		try:
-			cidlist=[cid for cid in cidlist if cid!=maxprec]
-			harvardlist=[cid for cid in harvardlist if cid!=maxprec2]
-		except:
-			cidlist=[]
-			harvardlist=[]
+		if maxi>.2:
+			# print row,col,cidlist[row],harvardlist[col],maxi
+			dict[cidlist[row]]=harvardlist[col]
+			score_array[row]=0
+			score_array[:,col]=0
 
 	return dict
 
