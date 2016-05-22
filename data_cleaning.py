@@ -625,6 +625,8 @@ def merge_harvard(cid):
 
 		data_dict[state][year]=temp
 
+	# return data_dict
+
 	# cid columns: u'state_x', u'StateFP', u'County', u'CountyFP', u'District', u'Name'
 	# merge in each state file following the rules above.
 
@@ -662,18 +664,18 @@ def merge_harvard(cid):
 	# DONE NH: County to county and town to Name g2012_USH_rv	g2012_USH_dv
 	# NONE NJ: none
 	# NONE NM: none
-	# DONE NY: match County to county_name and vtd08 to District. g2010_USH_dv	g2010_USH_rv
-	# NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2
+	# NONE NY: match County to county_name and vtd08 to District. g2010_USH_dv	g2010_USH_rv - I can't figure this out. It seems like it should be perfect but it doesn't match actual district votes at all
+	# DONE NC: County to county and District to vtd. g2010_USH_dv	g2010_USH_rv g2010_USH_dv2	g2010_USH_rv2 this match is not amazing, probably because of the dv2 and rv2 variables
 	# NONE ND: 1 district
-	# OH: County to county and Name to precinct_code. dv dv2 dv3
+	# DONE OH: County to county and Name to precinct_code. dv dv2 dv3, because of the 3 dvs some of these estimates are not amazing but all but one is correct - remember you could account for multi districts but the idea is just are you matching right, and these results make it look like you def are. A good sample of votes in each district
 	# OK: look at precinct column, which looks like this: "ALFALFA CO. PCT 020110" - the first bit matches County, the number matches up to District but only the last 3 digits (110), dv and dv2
 	# NONE OR: I don't think these can be matched but check cid - for some reason most of OR dropped
-	# PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv
+	# NONE PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv - turns out the county fips don't match up at all - both have 67 but the cid ones run to 133 while harvard is just 1-67
 	# NONE RI: no RI rows in CID
-	# SC: county to County and Name to precinct should fuzzy match well, dv and dv2
+	# DONE SC: county to County and Name to precinct should fuzzy match well, dv and dv2 - harvard dataset misspells like half the county names. Great stuff.
 	# NONE SD: 1 district
-	# TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
-	# TX: County to county and District to vtd, dv only
+	# DONE TN: county to County and precinct to Name - not close on some matches but should fuzzy match fine. dv and dv2
+	# DONE TX: County to county and District to vtd, dv only
 	# NONE UT: none
 	# NONE VT: 1 district
 	# VA: County to county and then fuzzy Name to precinct, dv only
@@ -685,7 +687,7 @@ def merge_harvard(cid):
 
 	# State by state breakdown of the voting files FOR 2012:
 
-	# NONEAK: 1 district
+	# NONE AK: 1 district
 	# DONE AL: fuzzy match County to county then fuzzy match namelsad to precinct. vars: g2012_USH_dv, g2012_USH_rv, g2012_USH_dv2, g2012_USH_rv2
 	# DONE AZ: remove 'County' from County and then match to county, take the first 2 (3?) digits of precinct and match to District. There is an election total row but that wil be ignored with this procedure g2012_USH_dv	g2012_USH_rv
 	# DONE AR: County is a perfect match for County, there are absentee breakouts in each county (sometimes>1). name is a close match for precinct. g2012_USH_dv	g2012_USH_rv
@@ -748,23 +750,104 @@ def merge_harvard(cid):
 # DOUBLE CHECK LIST - States you should double check
 # MINNESOTA - this one might have mistakes based on the merge, which is non-standard
 # MISSOURI - this is a standard merge but the name match between Name and precinct is very tricky, so I think this is just bad matching, probably incurable
-# NEW YORK - These are pretty bad. 
-	for state in data_dict.keys():
+	for state in [stated for stated in data_dict.keys() if stated=='TX']:
+		print state
 		for year in data_dict[state].keys():
 
 			temp=data_dict[state][year]
 			# all the merge rules go here
 
-			if state=='MO':
+			if state=='MO' or state=='SC' or state=='TN':
 				if int(year)==2010:
+
+					if(state=='SC'):
+						# fix all the county names that are misspelled
+						temp.ix[temp.county=='Malrboro','county']='marlboro'
+						temp.ix[temp.county=='Sumpter','county']='sumter'
+						temp.ix[temp.county=='Chsterfield','county']='chesterfield'
+						temp.ix[temp.county=='Dillion','county']='dillon'
+						temp.ix[temp.county=='Bearfort','county']='beaufort'
+						temp.ix[temp.county=='Oragneburg','county']='orangeburg'
+
+					# print temp[temp['county']=='dillon']
+
 					tempcid=cid[cid['state_x']==state]
 					field='precinct'
 
-					if state=='NY':
-						temp['precinct']=temp['vtd08']
-						temp['county']=temp['county_name']
 					a=standard_state(field,temp,state,year,tempcid)
-					return a
+
+					cid2=pd.merge(tempcid,a,on=['Name','County'],how='outer')
+					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv']]
+					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
+
+					cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
+					cid2['g2010_USH_dv']=cid2['g2010_USH_dv'].replace('', np.nan)
+
+					# calculate % r for each real district and each algo district
+					rdists=list(set(cid2['real_district']))
+					adists=list(set(cid2['HouseDistrict']))
+					rdists=[r for r in rdists if type(r)==type('a')]
+					if state=='SC':
+						rdists=['02', '03', '01', '06', '04', '05']
+					adists=[a for a in adists if type(a)==type('a')]
+
+					# print rdists,adists
+
+					for i,dist in enumerate(rdists):
+						actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
+
+						# print actual_vote
+						cid3=cid2.drop_duplicates(['state_x','County','Name'])
+						rdist_per=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum())
+						cid2['rvote']=cid2['g2010_USH_rv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+						cid2['dvote']=cid2['g2010_USH_dv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())
+						rrvotes=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()
+						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
+						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
+
+			# if state=='NY':
+			# 	if int(year)==2010:
+			# 		tempcid=cid[cid['state_x']==state]
+			# 		field='precinct'
+
+			# 		if state=='NY':
+			# 			temp['precinct']=temp['vtd08']
+			# 			temp['county']=temp['county_name']
+			# 		a=standard_state(field,temp,state,year,tempcid,field2='District')
+			# 		return a
+
+			# 		cid2=pd.merge(tempcid,a,on=['District','County'],how='outer')
+			# 		temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv']]
+			# 		cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
+
+			# 		cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
+			# 		cid2['g2010_USH_dv']=cid2['g2010_USH_dv'].replace('', np.nan)
+
+			# 		# calculate % r for each real district and each algo district
+			# 		rdists=list(set(cid2['real_district']))
+			# 		adists=list(set(cid2['HouseDistrict']))
+			# 		rdists=[r for r in rdists if type(r)==type('a')]
+			# 		adists=[a for a in adists if type(a)==type('a')]
+
+			# 		for i,dist in enumerate(rdists):
+			# 			actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
+
+			# 			cid3=cid2.drop_duplicates(['state_x','County','Name'])
+			# 			rdist_per=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum())
+			# 			cid2['rvote']=cid2['g2010_USH_rv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+			# 			cid2['dvote']=cid2['g2010_USH_dv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+			# 			adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())
+			# 			rrvotes=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()
+			# 			rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
+			# 			print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
+
+			if state=='OH':
+				if int(year)==2010:
+					tempcid=cid[cid['state_x']==state]
+					field='precinct'
+					temp['precinct']=temp['precinct_code']
+					a=standard_state(field,temp,state,year,tempcid)
 
 					cid2=pd.merge(tempcid,a,on=['Name','County'],how='outer')
 					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv']]
@@ -786,45 +869,11 @@ def merge_harvard(cid):
 						rdist_per=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum())
 						cid2['rvote']=cid2['g2010_USH_rv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
 						cid2['dvote']=cid2['g2010_USH_dv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
-						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())
+						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())						
 						rrvotes=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()
 						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
 						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
-			
-			if state=='NY':
-				if int(year)==2010:
-					tempcid=cid[cid['state_x']==state]
-					field='precinct'
 
-					if state=='NY':
-						temp['precinct']=temp['vtd08']
-						temp['county']=temp['county_name']
-					a=standard_state(field,temp,state,year,tempcid,field2='District')
-
-					cid2=pd.merge(tempcid,a,on=['District','County'],how='outer')
-					temp2=temp[['precinct','g2010_USH_dv','g2010_USH_rv']]
-					cid2=pd.merge(cid2,temp2,on=['precinct'],how='outer')
-
-					cid2['g2010_USH_rv']=cid2['g2010_USH_rv'].replace('', np.nan)
-					cid2['g2010_USH_dv']=cid2['g2010_USH_dv'].replace('', np.nan)
-
-					# calculate % r for each real district and each algo district
-					rdists=list(set(cid2['real_district']))
-					adists=list(set(cid2['HouseDistrict']))
-					rdists=[r for r in rdists if type(r)==type('a')]
-					adists=[a for a in adists if type(a)==type('a')]
-
-					for i,dist in enumerate(rdists):
-						actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
-
-						cid3=cid2.drop_duplicates(['state_x','County','Name'])
-						rdist_per=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum())
-						cid2['rvote']=cid2['g2010_USH_rv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
-						cid2['dvote']=cid2['g2010_USH_dv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
-						adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())
-						rrvotes=cid3[cid3['real_district']==dist]['g2010_USH_rv'].astype(float).sum()
-						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
-						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
 
 			if state=='NV':
 				if int(year)==2010:
@@ -887,8 +936,6 @@ def merge_harvard(cid):
 					# to check real districts you need to dedupe first to get rid of the entries for algorithm districts that break
 					# bounds - this should do it: cid3=cid2.drop_duplicates(['state_x','County','Name'])
 					# that will work for everything.
-
-					# also, it turns out that USH_dv2 and etc are useless. You don't know what the 2nd district is.
 
 					if state=='AL':
 						cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
@@ -968,7 +1015,42 @@ def merge_harvard(cid):
 						rdvotes=cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum()
 						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
 
-			if state=='CO':
+	# PA: match CountyFP to fips and then District to vtd (make sure you int em) just dv
+			# if state=='PA':
+			# 	if int(year)==2010:
+			# 		tempcid=cid[cid['state_x']==state].copy()
+			# 		tempcid['County']=tempcid['CountyFP'].astype(int)
+			# 		field='vtd'
+			# 		a=standard_statePA(field,temp,state,year,tempcid)
+			# 		# return a
+
+			# 		cid2=pd.merge(tempcid,a,on=['County','District'],how='outer')
+			# 		temp2=temp[['vtd','g2012_USH_dv','g2012_USH_rv']]
+			# 		cid2=pd.merge(cid2,temp2,on=['vtd'],how='outer')
+
+			# 		cid2['g2012_USH_rv']=cid2['g2012_USH_rv'].replace('', np.nan)
+			# 		cid2['g2012_USH_dv']=cid2['g2012_USH_dv'].replace('', np.nan)
+
+			# 		# calculate % r for each real district and each algo district
+			# 		rdists=list(set(cid2['real_district']))
+			# 		adists=list(set(cid2['HouseDistrict']))
+			# 		rdists=[r for r in rdists if type(r)==type('a')]
+			# 		adists=[a for a in adists if type(a)==type('a')]
+
+			# 		for i,dist in enumerate(rdists):
+			# 			actual_vote=[row for row in actual2012 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
+
+			# 			cid3=cid2.drop_duplicates(['state_x','County','Name'])
+			# 			rdist_per=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()/(cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()+cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum())
+			# 			cid2['rvote']=cid2['g2012_USH_rv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+			# 			cid2['dvote']=cid2['g2012_USH_dv'].astype(float)*cid2['percent_district_in_AlgoHouseDist']
+			# 			adist_per=cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()/(cid2[cid2['HouseDistrict']==adists[i]]['rvote'].astype(float).sum()+cid2[cid2['HouseDistrict']==adists[i]]['dvote'].astype(float).sum())						
+			# 			rrvotes=cid3[cid3['real_district']==dist]['g2012_USH_rv'].astype(float).sum()
+			# 			rdvotes=cid3[cid3['real_district']==dist]['g2012_USH_dv'].astype(float).sum()
+			# 			print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
+
+
+			if state=='CO' or state=='NC':
 				if int(year)==2010:
 					tempcid=cid[cid['state_x']==state]
 					temp2=temp[['vtd','g2010_USH_dv','g2010_USH_rv']]
@@ -996,7 +1078,7 @@ def merge_harvard(cid):
 						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
 						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
 
-			if state=='KS':
+			if state=='KS' or state=='TX':
 				if int(year)==2010:
 					tempcid=cid[cid['state_x']==state]
 					field='vtd'
@@ -1015,8 +1097,8 @@ def merge_harvard(cid):
 					rdists=[r for r in rdists if type(r)==type('a')]
 					adists=[a for a in adists if type(a)==type('a')]
 
-					cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
-					cid2.ix[cid2.real_district=='01','g2010_USH_dv']=0
+					# cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
+					# cid2.ix[cid2.real_district=='01','g2010_USH_dv']=0
 
 					for i,dist in enumerate(rdists):
 						actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
@@ -1029,7 +1111,7 @@ def merge_harvard(cid):
 						rdvotes=cid3[cid3['real_district']==dist]['g2010_USH_dv'].astype(float).sum()
 						print state,year,dist,rdist_per,adist_per,rrvotes,rdvotes,actual_vote[2],actual_vote[3],int(actual_vote[2])/(int(actual_vote[2])+int(actual_vote[3]))
 
-				elif int(year)==2012:
+				elif int(year)==2012 and state!='TX':
 					tempcid=cid[cid['state_x']==state]
 					field='vtd'
 					a=standard_state(field,temp,state,year,tempcid,field2='District')
@@ -1047,8 +1129,8 @@ def merge_harvard(cid):
 					rdists=[r for r in rdists if type(r)==type('a')]
 					adists=[a for a in adists if type(a)==type('a')]
 
-					cid2.ix[cid2.real_district=='01','g2012_USH_rv']=cid2[cid2['real_district']=='01']['g2012_USH_dv']
-					cid2.ix[cid2.real_district=='01','g2012_USH_dv']=0
+					# cid2.ix[cid2.real_district=='01','g2012_USH_rv']=cid2[cid2['real_district']=='01']['g2012_USH_dv']
+					# cid2.ix[cid2.real_district=='01','g2012_USH_dv']=0
 
 					for i,dist in enumerate(rdists):
 						actual_vote=[row for row in actual2012 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
@@ -1086,8 +1168,8 @@ def merge_harvard(cid):
 					rdists=[r for r in rdists if type(r)==type('a')]
 					adists=[a for a in adists if type(a)==type('a')]
 
-					cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
-					cid2.ix[cid2.real_district=='01','g2010_USH_dv']=0
+					# cid2.ix[cid2.real_district=='01','g2010_USH_rv']=cid2[cid2['real_district']=='01']['g2010_USH_dv']
+					# cid2.ix[cid2.real_district=='01','g2010_USH_dv']=0
 
 					for i,dist in enumerate(rdists):
 						actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
@@ -1121,8 +1203,8 @@ def merge_harvard(cid):
 					rdists=[r for r in rdists if type(r)==type('a')]
 					adists=[a for a in adists if type(a)==type('a')]
 
-					cid2.ix[cid2.real_district=='01','g2012_USH_rv']=cid2[cid2['real_district']=='01']['g2012_USH_dv']
-					cid2.ix[cid2.real_district=='01','g2012_USH_dv']=0
+					# cid2.ix[cid2.real_district=='01','g2012_USH_rv']=cid2[cid2['real_district']=='01']['g2012_USH_dv']
+					# cid2.ix[cid2.real_district=='01','g2012_USH_dv']=0
 
 					for i,dist in enumerate(rdists):
 						actual_vote=[row for row in actual2010 if states[state].lower()==row[0].lower() and int(row[1])==int(dist)][0]
@@ -1143,7 +1225,7 @@ def standard_state(field1,temp,state,year,tempcid,field2='Name'):
 	temp['county']=temp.apply(lambda x: x['county'].replace('county','').strip(),axis=1)
 	temp['county']=temp.apply(lambda x: x['county'].replace(' ',''),axis=1)
 	temp['county']=temp.apply(lambda x: x['county'].replace('.',''),axis=1)
-	temp[field1]=temp.apply(lambda x: x[field1].lower(),axis=1)
+	temp[field1] = temp.apply(lambda x: x[field1].lower(),axis=1)
 
 	counties=list(set(tempcid[tempcid['state_x']==state]['County']))
 	counties=[county.replace('county','').strip().lower() for county in counties]
@@ -1155,6 +1237,7 @@ def standard_state(field1,temp,state,year,tempcid,field2='Name'):
 		compare2=list(set(temp[temp['county']==county][field1]))
 		compare1=list(set(tempcid[tempcid['County']==county][field2]))
 
+		# print county
 		# print 'C1',compare1
 		# print 'C2',compare2
 		matches=unique_matcher(compare1,compare2)
@@ -1175,6 +1258,31 @@ def standard_stateMN(field1,temp,state,year,tempcid,field2='Name'):
 	counties=[county.replace('county','').strip().lower() for county in counties]
 	master_list=[]
 	for county in [county for county in counties]:
+		# print state,county
+		# print county
+		# print temp.iloc[1450:1470]
+		compare2=list(set(temp[temp['county']==county][field1]))
+		compare1=list(set(tempcid[tempcid['CountyFP']==county][field2]))
+
+		# print 'C1',compare1
+		# print 'C2',compare2
+		if(len(compare2)>0):
+			matches=unique_matcher(compare1,compare2)
+			for key in matches.keys():
+				master_list.append([county,key,matches[key]])
+
+	a=pd.DataFrame(master_list,columns=['CountyFP',field2,field1])
+	return a
+
+def standard_statePA(field1,temp,state,year,tempcid,field2='District'):
+	temp['county']=temp['county'].astype(int)
+	print len(tempcid)
+	counties=list(set(tempcid['CountyFP'].astype(int)))
+	# counties=[county.replace('county','').strip().lower() for county in counties]
+	master_list=[]
+	for county in [county for county in counties]:
+		print county
+		print list(set(temp['county']))
 		# print state,county
 		# print county
 		# print temp.iloc[1450:1470]
