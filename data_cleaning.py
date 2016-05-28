@@ -262,7 +262,7 @@ def precinct_names():
 	return temp_pandas
 
 def existing_districts():
-	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/National_CD114.txt','rU') as cfile:
+	with open('/Users/austinc/Desktop/Current Work/Redistricting-Algorithms/Raw Data/National_CD2010.txt','rU') as cfile:
 		reader=csv.reader(cfile)
 		temp=[row for row in reader]
 
@@ -285,7 +285,8 @@ def state_diagnostics2():
 
 def full_script():
 	a=block_vd_pandas()
-	total=load_demographics()
+	# total=load_demographics()
+	total=a
 	c=pd.merge(a,total,on='BlockID')
 	existingd=existing_districts()
 	c=pd.merge(c,existingd,on='BlockID')
@@ -299,6 +300,12 @@ def full_script():
 
 	# Count county/district/state duplicates AND county/district/state/algorithm district dupes
 	cd=cd[pd.notnull(cd['HouseDistrict'])]
+	cd['CountyFP']=cd['CountyFP_x']
+	cd['District']=cd['District_x']
+	del cd['CountyFP_x']
+	del cd['CountyFP_y']
+	del cd['District_x']
+	del cd['District_y']
 	cd['blocks']=cd.groupby(['state_x','CountyFP','District'])['BlockID'].transform('count')
 	cd['ADblocks']=cd.groupby(['state_x','CountyFP','District','HouseDistrict'])['BlockID'].transform('count')
 
