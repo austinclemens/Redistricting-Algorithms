@@ -758,7 +758,7 @@ def merge_harvard(cid,data_dict):
 # DOUBLE CHECK LIST - States you should double check
 # MINNESOTA - this one might have mistakes based on the merge, which is non-standard
 # MISSOURI - this is a standard merge but the name match between Name and precinct is very tricky, so I think this is just bad matching, probably incurable
-	for state in [stated for stated in data_dict.keys() if state=='FL']:
+	for state in [stated for stated in data_dict.keys() if stated=='FL']:
 		flag=0
 		print state
 		for year in data_dict[state].keys():
@@ -793,12 +793,25 @@ def merge_harvard(cid,data_dict):
 						temp['precinct']=temp.apply(lambda x: x['precinct'][3:],axis=1)
 						counties=['alachua','baker','bay','bradford','brevard','broward','calhoun','charlotte','citrus','clay','collier','columbia','desoto','dixie','duval','escambia','flagler','franklin','gadsden','gilchrist','glades','gulf','hamilton','hardee','hendry','hernando','highlands','hillsborough','holmes','indianriver','jackson','jefferson','lafayette','lake','lee','leon','levy','liberty','madison','manatee','marion','martin','miami-dade','monroe','nassau','okaloosa','okeechobee','orange','osceola','palmbeach','pasco','pinellas','polk','putnam','stjohns','stlucie','santarosa','sarasota','seminole','sumter','suwannee','taylor','union','volusia','wakulla','walton','washington']
 						for county in counties:
-							upperthree=county[0:3].upper()
-							temp.ix[temp.county==upperthree,'county']=county
+							if county=='marion':
+								temp.ix[temp.county=='MRN','county']=county
+							elif county=='collier':
+								temp.ix[temp.county=='CLL','county']=county
+							elif county=='columbia':
+								temp.ix[temp.county=='CLM','county']=county
+							elif county=='martin':
+								temp.ix[temp.county=='MRT','county']=county
+							elif county=='miami-dade':
+								temp.ix[temp.county=='DAD','county']=county
+							else:
+								upperthree=county[0:3].upper()
+								temp.ix[temp.county==upperthree,'county']=county
 						
 					# print temp[temp['county']=='dillon']
 
 					tempcid=cid[cid['state_x']==state]
+					if state=='FL':
+						tempcid.ix[tempcid.state_x=='FL','Name']=tempcid[tempcid.state_x=='FL']['District']
 					field='precinct'
 
 					a=standard_state(field,temp,state,year,tempcid)
@@ -1125,9 +1138,9 @@ def standard_state(field1,temp,state,year,tempcid,field2='Name'):
 		compare2=list(set(temp[temp['county']==county][field1]))
 		compare1=list(set(tempcid[tempcid['County']==county][field2]))
 
-		# print county
-		# print 'C1',compare1
-		# print 'C2',compare2
+		print county
+		print 'C1',compare1
+		print 'C2',compare2
 		matches=unique_matcher(compare1,compare2)
 		for key in matches.keys():
 			master_list.append([county,key,matches[key]])
